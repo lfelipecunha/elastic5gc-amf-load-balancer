@@ -1,0 +1,4 @@
+time="2020-11-30T18:02:42-03:00" level=warning msg="AmfId From Models To NGAP Error:  encoding/hex: odd length hex string" category=NGAP component=LIB
+time="2020-11-30T18:03:53-03:00" level=warning msg="AmfId From Models To NGAP Error:  encoding/hex: odd length hex string" category=NGAP component=LIB
+time="2020-11-30T18:05:04-03:00" level=warning msg="AmfId From Models To NGAP Error:  encoding/hex: odd length hex string" category=NGAP component=LIB
+time="2020-11-30T18:06:09-03:00" level=warning msg="Decode byteString failed: encoding/hex: invalid byte: U+006D 'm'" category=NGAP component=LIB
