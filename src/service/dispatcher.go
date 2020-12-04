@@ -1,4 +1,4 @@
-package loadbalancer
+package service
 
 import (
 	"amfLoadBalancer/lib/ngap"
@@ -53,49 +53,30 @@ func Dispatch(conn net.Conn, msg []byte) {
 
 		case ngapType.ProcedureCodeInitialUEMessage:
 			lbNgap.HandleInitialUEMessage(ran, pdu)
-			/*
-				case ngapType.ProcedureCodeUplinkNASTransport:
-					HandleUplinkNasTransport(ran, pdu)
-				case ngapType.ProcedureCodeNGReset:
-					HandleNGReset(ran, pdu)
-				case ngapType.ProcedureCodeHandoverCancel:
-					HandleHandoverCancel(ran, pdu)
-				case ngapType.ProcedureCodeUEContextReleaseRequest:
-					HandleUEContextReleaseRequest(ran, pdu)
-				case ngapType.ProcedureCodeNASNonDeliveryIndication:
-					HandleNasNonDeliveryIndication(ran, pdu)
-				case ngapType.ProcedureCodeLocationReportingFailureIndication:
-					HandleLocationReportingFailureIndication(ran, pdu)
-				case ngapType.ProcedureCodeErrorIndication:
-					HandleErrorIndication(ran, pdu)
-				case ngapType.ProcedureCodeUERadioCapabilityInfoIndication:
-					HandleUERadioCapabilityInfoIndication(ran, pdu)
-				case ngapType.ProcedureCodeHandoverNotification:
-					HandleHandoverNotify(ran, pdu)
-				case ngapType.ProcedureCodeHandoverPreparation:
-					HandleHandoverRequired(ran, pdu)
-				case ngapType.ProcedureCodeRANConfigurationUpdate:
-					HandleRanConfigurationUpdate(ran, pdu)
-				case ngapType.ProcedureCodeRRCInactiveTransitionReport:
-					HandleRRCInactiveTransitionReport(ran, pdu)
-				case ngapType.ProcedureCodePDUSessionResourceNotify:
-					HandlePDUSessionResourceNotify(ran, pdu)
-				case ngapType.ProcedureCodePathSwitchRequest:
-					HandlePathSwitchRequest(ran, pdu)
-				case ngapType.ProcedureCodeLocationReport:
-					HandleLocationReport(ran, pdu)
-				case ngapType.ProcedureCodeUplinkUEAssociatedNRPPaTransport:
-					HandleUplinkUEAssociatedNRPPATransport(ran, pdu)
-				case ngapType.ProcedureCodeUplinkRANConfigurationTransfer:
-					HandleUplinkRanConfigurationTransfer(ran, pdu)
-				case ngapType.ProcedureCodePDUSessionResourceModifyIndication:
-					HandlePDUSessionResourceModifyIndication(ran, pdu)
-				case ngapType.ProcedureCodeCellTrafficTrace:
-					HandleCellTrafficTrace(ran, pdu)
-				case ngapType.ProcedureCodeUplinkRANStatusTransfer:
-					HandleUplinkRanStatusTransfer(ran, pdu)
-				case ngapType.ProcedureCodeUplinkNonUEAssociatedNRPPaTransport:
-					HandleUplinkNonUEAssociatedNRPPATransport(ran, pdu)*/
+
+		case ngapType.ProcedureCodeUplinkNASTransport,
+			ngapType.ProcedureCodeNGReset,
+			ngapType.ProcedureCodeHandoverCancel,
+			ngapType.ProcedureCodeUEContextReleaseRequest,
+			ngapType.ProcedureCodeNASNonDeliveryIndication,
+			ngapType.ProcedureCodeLocationReportingFailureIndication,
+			ngapType.ProcedureCodeErrorIndication,
+			ngapType.ProcedureCodeUERadioCapabilityInfoIndication,
+			ngapType.ProcedureCodeHandoverNotification,
+			ngapType.ProcedureCodeHandoverPreparation,
+			ngapType.ProcedureCodeRANConfigurationUpdate,
+			ngapType.ProcedureCodeRRCInactiveTransitionReport,
+			ngapType.ProcedureCodePDUSessionResourceNotify,
+			ngapType.ProcedureCodePathSwitchRequest,
+			ngapType.ProcedureCodeLocationReport,
+			ngapType.ProcedureCodeUplinkUEAssociatedNRPPaTransport,
+			ngapType.ProcedureCodeUplinkRANConfigurationTransfer,
+			ngapType.ProcedureCodePDUSessionResourceModifyIndication,
+			ngapType.ProcedureCodeCellTrafficTrace,
+			ngapType.ProcedureCodeUplinkRANStatusTransfer,
+			ngapType.ProcedureCodeUplinkNonUEAssociatedNRPPaTransport:
+			lbNgap.HandleGenericMessages(ran, pdu)
+
 		default:
 			Ngaplog.Warnf("Not implemented(choice:%d, procedureCode:%d)\n", pdu.Present, initiatingMessage.ProcedureCode.Value)
 		}
@@ -106,6 +87,9 @@ func Dispatch(conn net.Conn, msg []byte) {
 			return
 		}
 		switch successfulOutcome.ProcedureCode.Value {
+		case ngapType.ProcedureCodeInitialContextSetup,
+			ngapType.ProcedureCodePDUSessionResourceSetup:
+			lbNgap.HandleGenericMessages(ran, pdu)
 		/*case ngapType.ProcedureCodeNGReset:
 			HandleNGResetAcknowledge(ran, pdu)
 		case ngapType.ProcedureCodeUEContextRelease:
@@ -116,12 +100,8 @@ func Dispatch(conn net.Conn, msg []byte) {
 			HandleUERadioCapabilityCheckResponse(ran, pdu)
 		case ngapType.ProcedureCodeAMFConfigurationUpdate:
 			HandleAMFconfigurationUpdateAcknowledge(ran, pdu)
-		case ngapType.ProcedureCodeInitialContextSetup:
-			HandleInitialContextSetupResponse(ran, pdu)
 		case ngapType.ProcedureCodeUEContextModification:
 			HandleUEContextModificationResponse(ran, pdu)
-		case ngapType.ProcedureCodePDUSessionResourceSetup:
-			HandlePDUSessionResourceSetupResponse(ran, pdu)
 		case ngapType.ProcedureCodePDUSessionResourceModify:
 			HandlePDUSessionResourceModifyResponse(ran, pdu)
 		case ngapType.ProcedureCodeHandoverResourceAllocation:

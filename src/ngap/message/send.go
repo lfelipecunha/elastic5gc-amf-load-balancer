@@ -21,6 +21,7 @@ func init() {
 }
 
 func SendToAmf(amf *context.Amf, packet []byte) {
+	ngaplog.Infof("Writing to AMF[%s]: %s", amf.AmfData.ID, amf.AmfData.IP)
 	if n, err := amf.Conn.Write(packet); err != nil {
 		ngaplog.Errorf("Send error: %+v", err)
 		return
@@ -30,6 +31,7 @@ func SendToAmf(amf *context.Amf, packet []byte) {
 }
 
 func SendToRan(ran *context.AmfRan, packet []byte) {
+	ngaplog.Infof("Writing to RAN[%s]: %s", ran.RanId, ran.Name)
 	var addr net.Addr
 	var remote_ip string
 	if ran == nil {

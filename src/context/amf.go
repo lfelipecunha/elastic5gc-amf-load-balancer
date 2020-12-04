@@ -9,24 +9,29 @@ import (
 	"github.com/ishidawataru/sctp"
 )
 
-var RanPort = 9847
+type AmfData struct {
+	IP   string
+	Port int
+	ID   string
+}
 
 type Amf struct {
 	/* socket Connect*/
-	Conn net.Conn
+	Conn    net.Conn
+	AmfData *AmfData
 }
 
-func NewAmf(amfIP string, amfPort int, ranIP string) *Amf {
+func NewAmf(amfData *AmfData, ranIP string, ranPort int) (*Amf, error) {
 	var amf Amf
 	var err error
-
-	amf.Conn, err = ConnectToAmf(amfIP, ranIP, amfPort, RanPort)
+	amf.AmfData = amfData
+	amf.Conn, err = ConnectToAmf(amfData.IP, ranIP, amfData.Port, ranPort)
 	if err != nil {
 		logger.ContextLog.Error("Unable to connect to AMF")
+		return nil, err
 	}
-	RanPort++
 
-	return &amf
+	return &amf, nil
 }
 
 func getNgapIp(amfIP, ranIP string, amfPort, ranPort int) (amfAddr, ranAddr *sctp.SCTPAddr, err error) {

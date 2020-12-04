@@ -2,6 +2,7 @@ package ngap
 
 import (
 	"amfLoadBalancer/lib/aper"
+	"amfLoadBalancer/lib/nas"
 	"amfLoadBalancer/lib/ngap"
 	"amfLoadBalancer/lib/ngap/ngapConvert"
 	"amfLoadBalancer/lib/ngap/ngapType"
@@ -10,8 +11,10 @@ import (
 	ngap_message "amfLoadBalancer/src/ngap/message"
 	"encoding/hex"
 	"net"
+	"reflect"
 )
 
+// HandleNGSetupRequest Handle NG Setup Request
 func HandleNGSetupRequest(ran *context.AmfRan, message *ngapType.NGAPPDU, originalMsg []byte) {
 	var globalRANNodeID *ngapType.GlobalRANNodeID
 	var rANNodeName *ngapType.RANNodeName
@@ -93,8 +96,8 @@ func HandleNGSetupRequest(ran *context.AmfRan, message *ngapType.NGAPPDU, origin
 			supportedTAI := context.NewSupportedTAI()
 			supportedTAI.Tai.Tac = tac
 			broadcastPLMNItem := supportedTAItem.BroadcastPLMNList.List[j]
-			plmnId := ngapConvert.PlmnIdToModels(broadcastPLMNItem.PLMNIdentity)
-			supportedTAI.Tai.PlmnId = &plmnId
+			plmnID := ngapConvert.PlmnIdToModels(broadcastPLMNItem.PLMNIdentity)
+			supportedTAI.Tai.PlmnId = &plmnID
 			capOfSNssaiList := cap(supportedTAI.SNssaiList)
 			for k := 0; k < len(broadcastPLMNItem.TAISliceSupportList.List); k++ {
 				tAISliceSupportItem := broadcastPLMNItem.TAISliceSupportList.List[k]
@@ -104,7 +107,7 @@ func HandleNGSetupRequest(ran *context.AmfRan, message *ngapType.NGAPPDU, origin
 					break
 				}
 			}
-			logger.NgapLog.Tracef("PLMN_ID[MCC:%s MNC:%s] TAC[%s]", plmnId.Mcc, plmnId.Mnc, tac)
+			logger.NgapLog.Tracef("PLMN_ID[MCC:%s MNC:%s] TAC[%s]", plmnID.Mcc, plmnID.Mnc, tac)
 			if len(ran.SupportedTAList) < capOfSupportTai {
 				ran.SupportedTAList = append(ran.SupportedTAList, supportedTAI)
 
@@ -142,10 +145,49 @@ func HandleNGSetupRequest(ran *context.AmfRan, message *ngapType.NGAPPDU, origin
 	ngap_message.SendNGSetupResponse(ran)
 }
 
+// HandleInitialUEMessage Handle Initial UE Message
 func HandleInitialUEMessage(ran *context.AmfRan, message *ngapType.NGAPPDU) {
 	var rANUENGAPID *ngapType.RANUENGAPID
 	var ranUe *context.RanUe
-	var err error
+	if ran == nil {
+		logger.NgapLog.Error("ran is nil")
+		return
+	}
+	if message == nil {
+		logger.NgapLog.Error("NGAP Message is nil")
+		return
+	}
+
+	rANUENGAPID = GetRanUeID(message)
+	logger.NgapLog.Debugf("[NGAP] Decode IE RanUeNgapID [%i]", rANUENGAPID.Value)
+
+	printRanInfo(ran)
+
+	if rANUENGAPID != nil {
+		ranUe = GetRanUe(ran, rANUENGAPID, true)
+	}
+
+	if ranUe != nil {
+		ngSetupMessage, err := ngap_message.BuildNgSetupRequest(ranUe)
+		ngap_message.SendToAmf(ranUe.Amf, ngSetupMessage)
+		var returnMessage = make([]byte, 2048)
+
+		_, err = ranUe.Amf.Conn.Read(returnMessage)
+		if err != nil {
+			logger.NgapLog.Errorf("Error: %+v", err)
+			return
+		}
+
+		ProxyMessage(ranUe, message, true)
+	}
+	return
+}
+
+func HandleGenericMessages(ran *context.AmfRan, message *ngapType.NGAPPDU) {
+	var rANUENGAPID *ngapType.RANUENGAPID
+	var ranUe *context.RanUe
+	var procedureCode int64
+	var read bool
 
 	if ran == nil {
 		logger.NgapLog.Error("ran is nil")
@@ -155,64 +197,104 @@ func HandleInitialUEMessage(ran *context.AmfRan, message *ngapType.NGAPPDU) {
 		logger.NgapLog.Error("NGAP Message is nil")
 		return
 	}
-	initiatingMessage := message.InitiatingMessage
-	if initiatingMessage == nil {
-		logger.NgapLog.Error("initiatingMessage is nil")
-		return
-	}
-	initialUeMessage := initiatingMessage.Value.InitialUEMessage
-	if initialUeMessage == nil {
-		logger.NgapLog.Error("initialUeMessage is nil")
-		return
-	}
 
-	logger.NgapLog.Info("[AMF] PDU Session Resource Setup Response")
-
-	for _, ie := range initialUeMessage.ProtocolIEs.List {
-		switch ie.Id.Value {
-		case ngapType.ProtocolIEIDRANUENGAPID: // ignore
-			rANUENGAPID = ie.Value.RANUENGAPID
-			logger.NgapLog.Trace("[NGAP] Decode IE RanUeNgapID")
-		}
+	if message.InitiatingMessage != nil {
+		procedureCode = message.InitiatingMessage.ProcedureCode.Value
+	} else if message.SuccessfulOutcome != nil {
+		procedureCode = message.SuccessfulOutcome.ProcedureCode.Value
+	} else if message.UnsuccessfulOutcome != nil {
+		procedureCode = message.UnsuccessfulOutcome.ProcedureCode.Value
 	}
+	logger.NgapLog.Infof("Handling %d message", procedureCode)
+
+	rANUENGAPID = GetRanUeID(message)
+	logger.NgapLog.Debugf("Decode IE RanUeNgapID [%i]", rANUENGAPID.Value)
 
 	printRanInfo(ran)
 
-	if rANUENGAPID != nil {
-		ranUe = ran.RanUeFindByRanUeNgapID(rANUENGAPID.Value)
-		if ranUe == nil {
-			ranUe, err = ran.NewRanUe(rANUENGAPID.Value)
-			if err != nil {
-				logger.NgapLog.Errorf("New RanUe Error: %+v", err)
-				return
-			}
+	switch procedureCode {
+	case ngapType.ProcedureCodeInitialContextSetup,
+		ngapType.ProcedureCodePDUSessionResourceSetup:
+		read = false
+	case ngapType.ProcedureCodeUplinkNASTransport:
+		nasProcCode := getNasProcedureCode(message.InitiatingMessage.Value.UplinkNASTransport.ProtocolIEs.List)
+		logger.NgapLog.Debugf("NAS CODE [%d]", nasProcCode)
+		switch nasProcCode {
+		case nas.MsgTypeRegistrationComplete:
+			read = false
+		default:
+			read = true
 		}
+	default:
+		read = true
 	}
 
-	if ranUe != nil {
-		ngSetupMessage, err := ngap_message.BuildNgSetupRequest(ranUe)
-		ngap_message.SendToAmf(ran.Amf, ngSetupMessage)
-		var returnMessage = make([]byte, 2048)
-		var n int
-		n, err = ran.Amf.Conn.Read(returnMessage)
-		if err != nil {
-			logger.NgapLog.Errorf("Error: %+v", err)
-			return
+	if rANUENGAPID != nil {
+		ranUe = GetRanUe(ran, rANUENGAPID, false)
+		if ranUe != nil {
+			ProxyMessage(ranUe, message, read)
 		}
-		logger.NgapLog.Debugf("Received: size[%i] message: %+v", n, returnMessage)
-
-		curMessage, err := ngap.Encoder(*message)
-
-		ngap_message.SendToAmf(ran.Amf, curMessage)
-
-		_, err = ran.Amf.Conn.Read(returnMessage)
-		if err != nil {
-			logger.NgapLog.Errorf("Error: %+v", err)
-			return
-		}
-		ngap_message.SendToRan(ranUe.Ran, returnMessage)
 	}
 	return
+}
+
+func getNasProcedureCode(list []ngapType.UplinkNASTransportIEs) uint8 {
+	var payload []byte
+	for _, item := range list {
+		if item.Id.Value == ngapType.ProtocolIEIDNASPDU {
+			payload = item.Value.NASPDU.Value
+			msg := new(nas.Message)
+			msg.SecurityHeaderType = uint8(nas.GetSecurityHeaderType(payload) & 0x0f)
+			if msg.SecurityHeaderType != nas.SecurityHeaderTypePlainNas {
+				payload = payload[7:]
+			}
+			msg.PlainNasDecode(&payload)
+			return msg.GmmMessage.GetMessageType()
+		}
+	}
+	return 0
+}
+
+func ProxyMessage(ranUe *context.RanUe, message *ngapType.NGAPPDU, read bool) {
+	var returnMessage = make([]byte, 2048)
+	curMessage, err := ngap.Encoder(*message)
+	var procedureCode int64
+	if message.InitiatingMessage != nil {
+		procedureCode = message.InitiatingMessage.ProcedureCode.Value
+	} else if message.SuccessfulOutcome != nil {
+		procedureCode = message.SuccessfulOutcome.ProcedureCode.Value
+	} else if message.UnsuccessfulOutcome != nil {
+		procedureCode = message.UnsuccessfulOutcome.ProcedureCode.Value
+	}
+
+	logger.NgapLog.Infof("Send original message (procedure: %d) to AMF[%s]", procedureCode, ranUe.Amf.AmfData.IP)
+	ngap_message.SendToAmf(ranUe.Amf, curMessage)
+	if read {
+		logger.NgapLog.Debugf("Procedure[%d] Waiting AMF response...", procedureCode)
+		_, err = ranUe.Amf.Conn.Read(returnMessage)
+		logger.NgapLog.Debugf("Procedure[%d] Received AMF response", procedureCode)
+		if err != nil {
+			logger.NgapLog.Errorf("Error: %+v", err)
+			return
+		}
+		logger.NgapLog.Infof("Send returned message from AMF[%s] to RAN", ranUe.Amf.AmfData.IP)
+		ngap_message.SendToRan(ranUe.Ran, returnMessage)
+	} else {
+		logger.NgapLog.Info("This message does not return data")
+	}
+}
+
+// GetRanUe Get context.RanUE object based on UE NGAP ID
+func GetRanUe(ran *context.AmfRan, ranUEID *ngapType.RANUENGAPID, create bool) *context.RanUe {
+	var err error
+	ranUe := ran.RanUeFindByRanUeNgapID(ranUEID.Value)
+	if ranUe == nil && create {
+		ranUe, err = ran.NewRanUe(ranUEID.Value)
+		if err != nil {
+			logger.NgapLog.Errorf("New RanUe Error: %+v", err)
+		}
+	}
+	return ranUe
 }
 
 func printAndGetCause(cause *ngapType.Cause) (present int, value aper.Enumerated) {
@@ -240,104 +322,64 @@ func printAndGetCause(cause *ngapType.Cause) (present int, value aper.Enumerated
 	return
 }
 
-func printCriticalityDiagnostics(criticalityDiagnostics *ngapType.CriticalityDiagnostics) {
-	logger.NgapLog.Trace("Criticality Diagnostics")
-
-	if criticalityDiagnostics.ProcedureCriticality != nil {
-		switch criticalityDiagnostics.ProcedureCriticality.Value {
-		case ngapType.CriticalityPresentReject:
-			logger.NgapLog.Trace("Procedure Criticality: Reject")
-		case ngapType.CriticalityPresentIgnore:
-			logger.NgapLog.Trace("Procedure Criticality: Ignore")
-		case ngapType.CriticalityPresentNotify:
-			logger.NgapLog.Trace("Procedure Criticality: Notify")
-		}
-	}
-
-	if criticalityDiagnostics.IEsCriticalityDiagnostics != nil {
-		for _, ieCriticalityDiagnostics := range criticalityDiagnostics.IEsCriticalityDiagnostics.List {
-			logger.NgapLog.Tracef("IE ID: %d", ieCriticalityDiagnostics.IEID.Value)
-
-			switch ieCriticalityDiagnostics.IECriticality.Value {
-			case ngapType.CriticalityPresentReject:
-				logger.NgapLog.Trace("Criticality Reject")
-			case ngapType.CriticalityPresentNotify:
-				logger.NgapLog.Trace("Criticality Notify")
-			}
-
-			switch ieCriticalityDiagnostics.TypeOfError.Value {
-			case ngapType.TypeOfErrorPresentNotUnderstood:
-				logger.NgapLog.Trace("Type of error: Not understood")
-			case ngapType.TypeOfErrorPresentMissing:
-				logger.NgapLog.Trace("Type of error: Missing")
-			}
-		}
-	}
-}
-
-func buildCriticalityDiagnostics(
-	procedureCode *int64,
-	triggeringMessage *aper.Enumerated,
-	procedureCriticality *aper.Enumerated,
-	iesCriticalityDiagnostics *ngapType.CriticalityDiagnosticsIEList) (
-	criticalityDiagnostics ngapType.CriticalityDiagnostics) {
-
-	if procedureCode != nil {
-		criticalityDiagnostics.ProcedureCode = new(ngapType.ProcedureCode)
-		criticalityDiagnostics.ProcedureCode.Value = *procedureCode
-	}
-
-	if triggeringMessage != nil {
-		criticalityDiagnostics.TriggeringMessage = new(ngapType.TriggeringMessage)
-		criticalityDiagnostics.TriggeringMessage.Value = *triggeringMessage
-	}
-
-	if procedureCriticality != nil {
-		criticalityDiagnostics.ProcedureCriticality = new(ngapType.Criticality)
-		criticalityDiagnostics.ProcedureCriticality.Value = *procedureCriticality
-	}
-
-	if iesCriticalityDiagnostics != nil {
-		criticalityDiagnostics.IEsCriticalityDiagnostics = iesCriticalityDiagnostics
-	}
-
-	return criticalityDiagnostics
-}
-
-func buildCriticalityDiagnosticsIEItem(ieCriticality aper.Enumerated, ieID int64, typeOfErr aper.Enumerated) (
-	item ngapType.CriticalityDiagnosticsIEItem) {
-
-	item = ngapType.CriticalityDiagnosticsIEItem{
-		IECriticality: ngapType.Criticality{
-			Value: ieCriticality,
-		},
-		IEID: ngapType.ProtocolIEID{
-			Value: ieID,
-		},
-		TypeOfError: ngapType.TypeOfError{
-			Value: typeOfErr,
-		},
-	}
-
-	return item
-}
-
+// printRanInfo Print Ran Info
 func printRanInfo(ran *context.AmfRan) {
 	var addr net.Addr
-	var remote_ip string
+	var remoteIP string
 
 	addr = ran.Conn.RemoteAddr()
 
-	remote_ip = "Undefined"
+	remoteIP = "Undefined"
 	if addr != nil {
-		remote_ip = addr.String()
+		remoteIP = addr.String()
 	}
 	switch ran.RanPresent {
 	case context.RanPresentGNbId:
-		logger.NgapLog.Tracef("IP[%s] GNbId[%s]", remote_ip, ran.RanId.GNbId.GNBValue)
+		logger.NgapLog.Tracef("IP[%s] GNbId[%s]", remoteIP, ran.RanId.GNbId.GNBValue)
 	case context.RanPresentNgeNbId:
-		logger.NgapLog.Tracef("IP[%s] NgeNbId[%s]", remote_ip, ran.RanId.NgeNbId)
+		logger.NgapLog.Tracef("IP[%s] NgeNbId[%s]", remoteIP, ran.RanId.NgeNbId)
 	case context.RanPresentN3IwfId:
-		logger.NgapLog.Tracef("IP[%s] N3IwfId[%s]", remote_ip, ran.RanId.N3IwfId)
+		logger.NgapLog.Tracef("IP[%s] N3IwfId[%s]", remoteIP, ran.RanId.N3IwfId)
 	}
+}
+
+// GetRanUeID get NGAP ID for UE in RAN context
+func GetRanUeID(message *ngapType.NGAPPDU) *ngapType.RANUENGAPID {
+	if message == nil {
+		logger.NgapLog.Error("NGAP Message is nil")
+		return nil
+	}
+
+	var r reflect.Value
+	switch {
+	case message.InitiatingMessage != nil:
+		r = reflect.ValueOf(message.InitiatingMessage.Value)
+	case message.SuccessfulOutcome != nil:
+		r = reflect.ValueOf(message.SuccessfulOutcome.Value)
+	case message.UnsuccessfulOutcome != nil:
+		r = reflect.ValueOf(message.UnsuccessfulOutcome.Value)
+	}
+
+	for i := 0; i < r.NumField(); i++ {
+		field := r.Field(i)
+		if field.Kind() == reflect.Ptr {
+			field = field.Elem()
+			if field.IsValid() {
+				return searchID(field.Field(0).Field(0))
+			}
+		}
+	}
+
+	return nil
+}
+
+func searchID(list reflect.Value) *ngapType.RANUENGAPID {
+	var i int
+	for i = 0; i < list.Len(); i++ {
+		item := list.Index(i)
+		if item.FieldByName("Id").FieldByName("Value").Int() == ngapType.ProtocolIEIDRANUENGAPID {
+			return item.FieldByName("Value").FieldByName("RANUENGAPID").Interface().(*ngapType.RANUENGAPID)
+		}
+	}
+	return nil
 }

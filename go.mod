@@ -4,6 +4,7 @@ go 1.14
 
 require (
 	github.com/aead/cmac v0.0.0-20160719120800-7af84192f0b1
+	github.com/antihax/optional v1.0.0
 	github.com/antonfisher/nested-logrus-formatter v1.2.0
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/gin-gonic/gin v1.6.3

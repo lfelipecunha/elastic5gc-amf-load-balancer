@@ -28,8 +28,6 @@ type AmfRan struct {
 	/* RAN UE List */
 	RanUeList  []*RanUe // RanUeNgapId as key
 	NGSetupMsg []byte
-
-	Amf *Amf
 }
 
 type SupportedTAI struct {
@@ -57,6 +55,11 @@ func (ran *AmfRan) NewRanUe(ranUeNgapID int64) (*RanUe, error) {
 	ranUe.AmfUeNgapId = amfUeNgapID
 	ranUe.RanUeNgapId = ranUeNgapID
 	ranUe.Ran = ran
+
+	self.RanPortMutex.Lock()
+	ranUe.Amf, _ = NewAmf(self.Balancer.SelectAmf(), self.NgapIpList[0], self.RanPort)
+	self.RanPort++
+	self.RanPortMutex.Unlock()
 
 	ran.RanUeList = append(ran.RanUeList, &ranUe)
 	self.RanUePool.Store(ranUe.AmfUeNgapId, &ranUe)

@@ -26,18 +26,14 @@ func init() {
 	AMF_Self().UriScheme = models.UriScheme_HTTPS
 	AMF_Self().RelativeCapacity = 0xff
 	AMF_Self().ServedGuamiList = make([]models.Guami, 0, MaxNumOfServedGuamiList)
-	/*AMF_Self().ServedGuamiList = []models.Guami{
-		{
-			PlmnId: &models.PlmnId{Mcc: "208", Mnc: "93"},
-			AmfId:  "amf",
-		},
-	}*/
 	AMF_Self().PlmnSupportList = make([]PlmnSupportItem, 0, MaxNumOfPLMNs)
 	AMF_Self().NfService = make(map[models.ServiceName]models.NfService)
 	AMF_Self().NetworkName.Full = "free5GC"
 	tmsiGenerator = idgenerator.NewGenerator(1, math.MaxInt32)
 	amfStatusSubscriptionIDGenerator = idgenerator.NewGenerator(1, math.MaxInt32)
 	amfUeNGAPIDGenerator = idgenerator.NewGenerator(1, MaxValueOfAmfUeNgapId)
+	AMF_Self().RanPort = 9847
+	AMF_Self().Balancer = &RoundinRobin{}
 }
 
 type AMFContext struct {
@@ -70,6 +66,9 @@ type AMFContext struct {
 	T3512Value                      int      // unit is second
 	Non3gppDeregistrationTimerValue int      // unit is second
 	AMF_list                        sync.Map
+	RanPort                         int
+	RanPortMutex                    sync.Mutex
+	Balancer                        BalancerStrategy
 }
 
 type AMFContextEventSubscription struct {
@@ -250,8 +249,8 @@ func (context *AMFContext) NewAmfRan(conn net.Conn) *AmfRan {
 	ran.SupportedTAList = make([]SupportedTAI, 0, MaxNumOfTAI*MaxNumOfBroadcastPLMNs)
 	ran.Conn = conn
 
-	ran.Amf = NewAmf("10.100.200.14", 38412, "10.100.200.250")
 	context.AmfRanPool.Store(conn, &ran)
+
 	return &ran
 }
 

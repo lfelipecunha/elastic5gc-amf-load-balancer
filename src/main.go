@@ -4,8 +4,8 @@ import (
 	"amfLoadBalancer/lib/path_util"
 	"amfLoadBalancer/src/context"
 	"amfLoadBalancer/src/factory"
-	"amfLoadBalancer/src/loadbalancer"
 	"amfLoadBalancer/src/logger"
+	"amfLoadBalancer/src/service"
 	"amfLoadBalancer/src/util"
 	"os"
 
@@ -34,11 +34,16 @@ func main() {
 }
 
 func action(c *cli.Context) {
-	var hosts []string
-	hosts = append(hosts, "10.100.200.250")
-	factory.InitConfigFactory(path_util.GoamfLoadBalancerPath("amfLoadBalancer/config/load_balancer.conf"))
+	configFile := c.String("balancercfg")
+
+	if configFile != "" {
+		factory.InitConfigFactory(configFile)
+	} else {
+		DefaultAmfConfigPath := path_util.GoamfLoadBalancerPath("amfLoadBalancer/config/load_balancer.conf")
+		factory.InitConfigFactory(DefaultAmfConfigPath)
+	}
+
 	util.InitAmfContext(context.AMF_Self())
-	loadbalancer.Run(hosts, 38412, loadbalancer.Dispatch)
-	//AMF.Initialize(c)
-	//AMF.Start()
+	service.UpdateAmfList()
+	service.Run(context.AMF_Self().NgapIpList, 38412, service.Dispatch)
 }
