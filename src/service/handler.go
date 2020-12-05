@@ -1,14 +1,18 @@
 package service
 
 import (
+	"amfLoadBalancer/src/consumer"
 	"amfLoadBalancer/src/logger"
 	"encoding/hex"
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"github.com/ishidawataru/sctp"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 type Handler func(conn net.Conn, msg []byte)
@@ -19,7 +23,7 @@ const readBufSize uint32 = 8192
 var sctpListener *sctp.SCTPListener
 var connections sync.Map
 
-func Run(addresses []string, port int, msgHandler Handler) {
+func RunSCtp(addresses []string, port int, msgHandler Handler) {
 	ips := []net.IPAddr{}
 
 	for _, addr := range addresses {
@@ -36,8 +40,13 @@ func Run(addresses []string, port int, msgHandler Handler) {
 		Port:    port,
 	}
 
-	go listenAndServeSctp(addr, msgHandler)
-	listenAndServeHttp(ips[0])
+	listenAndServeSctp(addr, msgHandler)
+}
+
+func RunHttp(address string, port int, nfuri string) {
+	address = address + ":" + strconv.Itoa(port)
+	listenAndServeHttp(address)
+	consumer.SubscribeAmfsChanges(nfuri, "http://"+address)
 }
 
 func listenAndServeSctp(addr *sctp.SCTPAddr, msgHandler Handler) {
@@ -164,22 +173,23 @@ func handleConnection(conn *sctp.SCTPConn, bufsize uint32, msgHandler Handler) e
 	}
 }
 
-func listenAndServeHttp(ip net.IPAddr) {
+func listenAndServeHttp(uri string) {
 	// Create a server on port 8000
-	// Exactly how you would run an HTTP/1.1 server
-	srv := &http.Server{Addr: ip.IP.String() + ":8000", Handler: http.HandlerFunc(handleHttp)}
+	h2s := &http2.Server{}
+	handler := http.HandlerFunc(handleHttp)
 
-	// Start the server with TLS, since we are running HTTP/2 it must be
-	// run with TLS.
+	srv := &http.Server{Addr: uri, Handler: h2c.NewHandler(handler, h2s)}
+
 	// Exactly how you would run an HTTP/1.1 server with TLS connection.
-	logger.AppLog.Info("Serving on http://" + ip.IP.String() + ":8000")
-	srv.ListenAndServe()
+	logger.AppLog.Info("Serving on " + uri)
+	go srv.ListenAndServe()
 }
 
 func handleHttp(w http.ResponseWriter, r *http.Request) {
 	// Log the request protocol
 	logger.HttpLog.Infof("Got connection: %s", r.Proto)
 	UpdateAmfList()
+	w.WriteHeader(http.StatusNoContent)
 	// Send a message back to the client
-	w.Write([]byte("OK"))
+	w.Write([]byte(""))
 }

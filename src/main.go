@@ -45,5 +45,6 @@ func action(c *cli.Context) {
 
 	util.InitAmfContext(context.AMF_Self())
 	service.UpdateAmfList()
-	service.Run(context.AMF_Self().NgapIpList, 38412, service.Dispatch)
+	service.RunHttp(context.AMF_Self().NgapIpList[0], 8080, context.AMF_Self().NrfUri)
+	service.RunSCtp(context.AMF_Self().NgapIpList, 38412, service.Dispatch)
 }

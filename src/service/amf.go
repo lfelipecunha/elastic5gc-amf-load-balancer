@@ -12,7 +12,7 @@ func UpdateAmfList() {
 	balancer := context.AMF_Self().Balancer
 	amfs := balancer.GetAmfs()
 
-	copy(controlAmfs, amfs)
+	controlAmfs = amfs
 	logger.AppLog.Debugf("Founded %d AMFs", len(result.NfInstances))
 	for i := 0; i < len(result.NfInstances); i++ {
 		ip := result.NfInstances[i].Ipv4Addresses[0]
