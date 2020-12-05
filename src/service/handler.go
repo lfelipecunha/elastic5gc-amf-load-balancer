@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"io"
 	"net"
+	"net/http"
 	"sync"
 
 	"github.com/ishidawataru/sctp"
@@ -35,10 +36,11 @@ func Run(addresses []string, port int, msgHandler Handler) {
 		Port:    port,
 	}
 
-	listenAndServe(addr, msgHandler)
+	go listenAndServeSctp(addr, msgHandler)
+	listenAndServeHttp(ips[0])
 }
 
-func listenAndServe(addr *sctp.SCTPAddr, msgHandler Handler) {
+func listenAndServeSctp(addr *sctp.SCTPAddr, msgHandler Handler) {
 	initMsg := sctp.InitMsg{NumOstreams: 3, MaxInstreams: 5, MaxAttempts: 4, MaxInitTimeout: 8}
 
 	if listener, err := sctp.ListenSCTPExt("sctp", addr, initMsg); err != nil {
@@ -160,4 +162,24 @@ func handleConnection(conn *sctp.SCTPConn, bufsize uint32, msgHandler Handler) e
 		// TODO: concurrent on per-UE message
 		msgHandler(conn, buf[:n])
 	}
+}
+
+func listenAndServeHttp(ip net.IPAddr) {
+	// Create a server on port 8000
+	// Exactly how you would run an HTTP/1.1 server
+	srv := &http.Server{Addr: ip.IP.String() + ":8000", Handler: http.HandlerFunc(handleHttp)}
+
+	// Start the server with TLS, since we are running HTTP/2 it must be
+	// run with TLS.
+	// Exactly how you would run an HTTP/1.1 server with TLS connection.
+	logger.AppLog.Info("Serving on http://" + ip.IP.String() + ":8000")
+	srv.ListenAndServe()
+}
+
+func handleHttp(w http.ResponseWriter, r *http.Request) {
+	// Log the request protocol
+	logger.HttpLog.Infof("Got connection: %s", r.Proto)
+	UpdateAmfList()
+	// Send a message back to the client
+	w.Write([]byte("OK"))
 }

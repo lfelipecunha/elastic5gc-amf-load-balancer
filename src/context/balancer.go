@@ -8,6 +8,9 @@ type BalancerStrategy interface {
 	SelectAmf() *AmfData
 	AddAmf(*AmfData)
 	RemoveAmf(string)
+	Lock()
+	Unlock()
+	GetAmfs() []*AmfData
 }
 
 type RoundinRobin struct {
@@ -18,25 +21,44 @@ type RoundinRobin struct {
 
 func (rr *RoundinRobin) SelectAmf() *AmfData {
 	var index int
-	rr.Mutex.Lock()
+	rr.Lock()
 	index = rr.Current
 	rr.Current++
 	if rr.Current >= len(rr.Amfs) {
 		rr.Current = 0
 	}
-	rr.Mutex.Unlock()
+	rr.Unlock()
 	return rr.Amfs[index]
 }
 
-func (rr *RoundinRobin) AddAmf(amfData *AmfData) {
+func (rr *RoundinRobin) Lock() {
 	rr.Mutex.Lock()
-	rr.Amfs = append(rr.Amfs, amfData)
+}
+
+func (rr *RoundinRobin) Unlock() {
 	rr.Mutex.Unlock()
 }
 
+func (rr *RoundinRobin) AddAmf(amfData *AmfData) {
+	rr.Lock()
+	exists := false
+	for _, r := range rr.Amfs {
+		if r.ID == amfData.ID {
+			// do not add existent AMF
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		rr.Amfs = append(rr.Amfs, amfData)
+	}
+	rr.Unlock()
+}
+
 func (rr *RoundinRobin) RemoveAmf(id string) {
-	rr.Mutex.Lock()
+	rr.Lock()
 	var i int
+
 	for i = 0; i < len(rr.Amfs); i++ {
 		if rr.Amfs[i].ID == id {
 			rr.Amfs = append(rr.Amfs[:i], rr.Amfs[i+1:]...)
@@ -46,5 +68,9 @@ func (rr *RoundinRobin) RemoveAmf(id string) {
 	if rr.Current >= len(rr.Amfs) {
 		rr.Current = 0
 	}
-	rr.Mutex.Unlock()
+	rr.Unlock()
+}
+
+func (rr *RoundinRobin) GetAmfs() []*AmfData {
+	return rr.Amfs
 }
