@@ -247,6 +247,7 @@ func (context *AMFContext) AmfUeFindByPei(pei string) (ue *AmfUe, ok bool) {
 func (context *AMFContext) NewAmfRan(conn net.Conn) *AmfRan {
 	ran := AmfRan{}
 	ran.SupportedTAList = make([]SupportedTAI, 0, MaxNumOfTAI*MaxNumOfBroadcastPLMNs)
+	ran.AMFList = make(map[string]*Amf)
 	ran.Conn = conn
 
 	context.AmfRanPool.Store(conn, &ran)

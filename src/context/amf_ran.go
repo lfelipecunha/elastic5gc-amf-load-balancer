@@ -28,6 +28,7 @@ type AmfRan struct {
 	/* RAN UE List */
 	RanUeList  []*RanUe // RanUeNgapId as key
 	NGSetupMsg []byte
+	AMFList    map[string]*Amf
 }
 
 type SupportedTAI struct {
@@ -45,6 +46,26 @@ func (ran *AmfRan) Remove() {
 	AMF_Self().DeleteAmfRan(ran.Conn)
 }
 
+func (ran *AmfRan) GetConnToAmf(amfData *AmfData) (*Amf, error) {
+	var err error
+	amf, ok := ran.AMFList[amfData.ID]
+
+	if ok == false {
+		self := AMF_Self()
+		self.RanPortMutex.Lock()
+		amf, err = NewAmf(amfData, self.NgapIpList[0], self.RanPort)
+		self.RanPort++
+		self.RanPortMutex.Unlock()
+		if err != nil {
+			return nil, err
+		}
+
+		ran.AMFList[amfData.ID] = amf
+	}
+
+	return amf, nil
+}
+
 func (ran *AmfRan) NewRanUe(ranUeNgapID int64) (*RanUe, error) {
 	ranUe := RanUe{}
 	self := AMF_Self()
@@ -56,10 +77,10 @@ func (ran *AmfRan) NewRanUe(ranUeNgapID int64) (*RanUe, error) {
 	ranUe.RanUeNgapId = ranUeNgapID
 	ranUe.Ran = ran
 
-	self.RanPortMutex.Lock()
+	/*self.RanPortMutex.Lock()
 	ranUe.Amf, _ = NewAmf(self.Balancer.SelectAmf(), self.NgapIpList[0], self.RanPort)
 	self.RanPort++
-	self.RanPortMutex.Unlock()
+	self.RanPortMutex.Unlock()*/
 
 	ran.RanUeList = append(ran.RanUeList, &ranUe)
 	self.RanUePool.Store(ranUe.AmfUeNgapId, &ranUe)

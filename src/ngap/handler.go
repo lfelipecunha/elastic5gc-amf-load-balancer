@@ -169,16 +169,25 @@ func HandleInitialUEMessage(ran *context.AmfRan, message *ngapType.NGAPPDU) {
 
 	if ranUe != nil {
 		ngSetupMessage, err := ngap_message.BuildNgSetupRequest(ranUe)
-		ngap_message.SendToAmf(ranUe.Amf, ngSetupMessage)
+
+		balancer := context.AMF_Self().Balancer
+		amf, err := ranUe.Ran.GetConnToAmf(balancer.SelectAmf(ranUe))
+
+		if err != nil {
+			logger.NgapLog.Errorf("Error on connect to AMF: %+v", err)
+			return
+		}
+
+		ngap_message.SendToAmf(amf, ngSetupMessage)
 		var returnMessage = make([]byte, 2048)
 
-		_, err = ranUe.Amf.Conn.Read(returnMessage)
+		_, err = amf.Conn.Read(returnMessage)
 		if err != nil {
 			logger.NgapLog.Errorf("Error: %+v", err)
 			return
 		}
 
-		ProxyMessage(ranUe, message, true)
+		ProxyMessage(ranUe, amf, message, true)
 	}
 	return
 }
@@ -232,7 +241,12 @@ func HandleGenericMessages(ran *context.AmfRan, message *ngapType.NGAPPDU) {
 	if rANUENGAPID != nil {
 		ranUe = GetRanUe(ran, rANUENGAPID, false)
 		if ranUe != nil {
-			ProxyMessage(ranUe, message, read)
+			amf, err := ranUe.Ran.GetConnToAmf(context.AMF_Self().Balancer.SelectAmf(ranUe))
+			if err != nil {
+				logger.NgapLog.Errorf("Error on connect to AMF: %+v", err)
+				return
+			}
+			ProxyMessage(ranUe, amf, message, read)
 		}
 	}
 	return
@@ -255,7 +269,7 @@ func getNasProcedureCode(list []ngapType.UplinkNASTransportIEs) uint8 {
 	return 0
 }
 
-func ProxyMessage(ranUe *context.RanUe, message *ngapType.NGAPPDU, read bool) {
+func ProxyMessage(ranUe *context.RanUe, amf *context.Amf, message *ngapType.NGAPPDU, read bool) {
 	var returnMessage = make([]byte, 2048)
 	curMessage, err := ngap.Encoder(*message)
 	var procedureCode int64
@@ -267,17 +281,17 @@ func ProxyMessage(ranUe *context.RanUe, message *ngapType.NGAPPDU, read bool) {
 		procedureCode = message.UnsuccessfulOutcome.ProcedureCode.Value
 	}
 
-	logger.NgapLog.Infof("Send original message (procedure: %d) to AMF[%s]", procedureCode, ranUe.Amf.AmfData.IP)
-	ngap_message.SendToAmf(ranUe.Amf, curMessage)
+	logger.NgapLog.Infof("Send original message (procedure: %d) to AMF[%s]", procedureCode, amf.AmfData.IP)
+	ngap_message.SendToAmf(amf, curMessage)
 	if read {
 		logger.NgapLog.Debugf("Procedure[%d] Waiting AMF response...", procedureCode)
-		_, err = ranUe.Amf.Conn.Read(returnMessage)
+		_, err = amf.Conn.Read(returnMessage)
 		logger.NgapLog.Debugf("Procedure[%d] Received AMF response", procedureCode)
 		if err != nil {
 			logger.NgapLog.Errorf("Error: %+v", err)
 			return
 		}
-		logger.NgapLog.Infof("Send returned message from AMF[%s] to RAN", ranUe.Amf.AmfData.IP)
+		logger.NgapLog.Infof("Send returned message from AMF[%s] to RAN", amf.AmfData.IP)
 		ngap_message.SendToRan(ranUe.Ran, returnMessage)
 	} else {
 		logger.NgapLog.Info("This message does not return data")

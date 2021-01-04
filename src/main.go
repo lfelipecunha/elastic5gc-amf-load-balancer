@@ -25,8 +25,19 @@ func main() {
 	app.Name = "Amf Load Balancer"
 	appLog.Infoln(app.Name)
 	//appLog.Infoln("AMF version: ", version.GetVersion())
-	//app.Usage = "-amfLoadBalancercfg common configuration file -amfcfg amf configuration file"
+	app.Usage = "-balancercfg configuration file"
 	app.Action = action
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "free5gccfg",
+			Usage: "common config file",
+		},
+		cli.StringFlag{
+			Name:  "balancercfg",
+			Usage: "amf config file",
+		},
+	}
+
 	//app.Flags = AMF.GetCliCmd()
 	if err := app.Run(os.Args); err != nil {
 		logger.AppLog.Errorf("AMF Load Balancer Run error: %v", err)

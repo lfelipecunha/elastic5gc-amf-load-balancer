@@ -27,6 +27,7 @@ var NasLog *logrus.Entry
 var ConsumerLog *logrus.Entry
 var EeLog *logrus.Entry
 var GinLog *logrus.Entry
+var BalancerLog *logrus.Entry
 
 func init() {
 	log = logrus.New()
@@ -67,6 +68,7 @@ func init() {
 	ConsumerLog = log.WithFields(logrus.Fields{"component": "LOAD BALANCER", "category": "Consumer"})
 	EeLog = log.WithFields(logrus.Fields{"component": "LOAD BALANCER", "category": "EventExposure"})
 	GinLog = log.WithFields(logrus.Fields{"component": "LOAD BALANCER", "category": "GIN"})
+	BalancerLog = log.WithFields(logrus.Fields{"component": "LOAD BALANCER", "category": "Balancer"})
 }
 
 func SetLogLevel(level logrus.Level) {

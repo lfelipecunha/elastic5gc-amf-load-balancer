@@ -1,11 +1,12 @@
 package context
 
 import (
+	"amfLoadBalancer/src/logger"
 	"sync"
 )
 
 type BalancerStrategy interface {
-	SelectAmf() *AmfData
+	SelectAmf(*RanUe) *AmfData
 	AddAmf(*AmfData)
 	RemoveAmf(string)
 	Lock()
@@ -17,18 +18,34 @@ type RoundinRobin struct {
 	Amfs    []*AmfData
 	Current int
 	Mutex   sync.Mutex
+	Ue2Amf  sync.Map // map[RanUE.RanUeNgapId] *AmfData
 }
 
-func (rr *RoundinRobin) SelectAmf() *AmfData {
+func (rr *RoundinRobin) SelectAmf(ranUe *RanUe) *AmfData {
 	var index int
 	rr.Lock()
-	index = rr.Current
+	amfData, ok := rr.Ue2Amf.Load(ranUe.RanUeNgapId)
+	if ok && amfData != nil {
+		data := amfData.(*AmfData)
+		for _, amf := range rr.Amfs {
+			if amf.ID == data.ID {
+				rr.Unlock()
+				return data
+			}
+		}
+
+		logger.BalancerLog.Debugf("Changing AMF of UE[%s]", ranUe.RanUeNgapId)
+	}
+
 	rr.Current++
 	if rr.Current >= len(rr.Amfs) {
 		rr.Current = 0
 	}
 	rr.Unlock()
-	return rr.Amfs[index]
+	result := rr.Amfs[rr.Current]
+	rr.Ue2Amf.Store(ranUe.RanUeNgapId, result)
+	logger.BalancerLog.Debugf("Select AMF[%s] to UE[%s]", result.ID, ranUe.RanUeNgapId)
+	return result
 }
 
 func (rr *RoundinRobin) Lock() {

@@ -111,6 +111,10 @@ func listenAndServeSctp(addr *sctp.SCTPAddr, msgHandler Handler) {
 			logger.NgapLog.Debugf("Set read buffer to %d bytes", readBufSize)
 		}
 		remoteAddr := conn.RemoteAddr()
+		if remoteAddr == nil {
+			logger.NgapLog.Errorf("Connection closed!")
+			continue
+		}
 		logger.NgapLog.Infof("[AMF] SCTP Accept from: %s", remoteAddr.String())
 
 		connections.Store(conn, conn)

@@ -46,7 +46,6 @@ type RanUe struct {
 	/* Related Context*/
 	AmfUe *AmfUe
 	Ran   *AmfRan
-	Amf   *Amf
 
 	/* Routing ID */
 	RoutingID string
