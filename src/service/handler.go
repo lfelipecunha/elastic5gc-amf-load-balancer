@@ -192,7 +192,7 @@ func listenAndServeHttp(uri string) {
 func handleHttp(w http.ResponseWriter, r *http.Request) {
 	// Log the request protocol
 	logger.HttpLog.Infof("Got connection: %s", r.Proto)
-	logger.HttpLog.Infof("Got connection: %s", r.URL.Path)
+	logger.HttpLog.Infof("PATH: %s", r.URL.Path)
 	if r.URL.Path == "/block_amf" {
 		var b []byte
 		_, err := r.Body.Read(b)
@@ -200,6 +200,7 @@ func handleHttp(w http.ResponseWriter, r *http.Request) {
 			logger.AppLog.Errorf("Http server: %s", err)
 		}
 		url := string(b)
+		logger.HttpLog.Debugf("URL to block: %s", url)
 		BlockAmf(url)
 	} else {
 		UpdateAmfList()
