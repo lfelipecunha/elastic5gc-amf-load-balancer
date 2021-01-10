@@ -10,9 +10,10 @@ import (
 )
 
 type AmfData struct {
-	IP   string
-	Port int
-	ID   string
+	IP      string
+	Port    int
+	ID      string
+	Blocked bool
 }
 
 type Amf struct {

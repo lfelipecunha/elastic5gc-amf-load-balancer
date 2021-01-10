@@ -27,11 +27,17 @@ func UpdateAmfList() {
 			}
 		}
 		if add {
-			balancer.AddAmf(&context.AmfData{IP: ip, Port: 38412, ID: id})
+			balancer.AddAmf(&context.AmfData{IP: ip, Port: 38412, ID: id, Blocked: false})
 		}
 	}
 
 	for _, amf := range controlAmfs {
 		balancer.RemoveAmf(amf.ID)
 	}
+}
+
+func BlockAmf(url string) {
+	balancer := context.AMF_Self().Balancer
+	balancer.BlockAmf(url)
+
 }

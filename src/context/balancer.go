@@ -12,6 +12,7 @@ type BalancerStrategy interface {
 	Lock()
 	Unlock()
 	GetAmfs() []*AmfData
+	BlockAmf(string)
 }
 
 type RoundinRobin struct {
@@ -22,7 +23,6 @@ type RoundinRobin struct {
 }
 
 func (rr *RoundinRobin) SelectAmf(ranUe *RanUe) *AmfData {
-	var index int
 	rr.Lock()
 	amfData, ok := rr.Ue2Amf.Load(ranUe.RanUeNgapId)
 	if ok && amfData != nil {
@@ -37,12 +37,19 @@ func (rr *RoundinRobin) SelectAmf(ranUe *RanUe) *AmfData {
 		logger.BalancerLog.Debugf("Changing AMF of UE[%s]", ranUe.RanUeNgapId)
 	}
 
-	rr.Current++
-	if rr.Current >= len(rr.Amfs) {
-		rr.Current = 0
+	var result *AmfData
+	for {
+		rr.Current++
+		if rr.Current >= len(rr.Amfs) {
+			rr.Current = 0
+		}
+		result = rr.Amfs[rr.Current]
+		if !result.Blocked {
+			break
+		}
 	}
 	rr.Unlock()
-	result := rr.Amfs[rr.Current]
+
 	rr.Ue2Amf.Store(ranUe.RanUeNgapId, result)
 	logger.BalancerLog.Debugf("Select AMF[%s] to UE[%s]", result.ID, ranUe.RanUeNgapId)
 	return result
@@ -90,4 +97,13 @@ func (rr *RoundinRobin) RemoveAmf(id string) {
 
 func (rr *RoundinRobin) GetAmfs() []*AmfData {
 	return rr.Amfs
+}
+
+func (rr *RoundinRobin) BlockAmf(url string) {
+	rr.Lock()
+	for i := 0; i < len(rr.Amfs); i++ {
+		if rr.Amfs[i].IP == url {
+			rr.Amfs[i].Blocked = true
+		}
+	}
 }
