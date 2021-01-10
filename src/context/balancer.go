@@ -103,6 +103,7 @@ func (rr *RoundinRobin) BlockAmf(url string) {
 	rr.Lock()
 	for i := 0; i < len(rr.Amfs); i++ {
 		if rr.Amfs[i].IP == url {
+			logger.BalancerLog.Debugf("Blocking AMF[%s]", rr.Amfs[i].IP)
 			rr.Amfs[i].Blocked = true
 		}
 	}
