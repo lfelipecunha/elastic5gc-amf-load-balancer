@@ -193,15 +193,15 @@ func handleHttp(w http.ResponseWriter, r *http.Request) {
 	// Log the request protocol
 	logger.HttpLog.Infof("Got connection: %s", r.Proto)
 	logger.HttpLog.Infof("PATH: %s", r.URL.Path)
-	if r.URL.Path == "/block_amf" {
-		var b []byte
-		_, err := r.Body.Read(b)
-		if err != nil {
-			logger.AppLog.Errorf("Http server: %s", err)
+	if r.URL.Path == "/block_amf" && r.Method == "POST" {
+		// Call ParseForm() to parse the raw query and update r.PostForm and r.Form.
+		if err := r.ParseForm(); err != nil {
+			logger.HttpLog.Errorf("ParseForm() err: %v", err)
+		} else {
+			url := r.FormValue("url")
+			logger.HttpLog.Debugf("Url to block: %s", url)
+			BlockAmf(url)
 		}
-		url := string(b)
-		logger.HttpLog.Debugf("URL to block: %s", url)
-		BlockAmf(url)
 	} else {
 		UpdateAmfList()
 	}

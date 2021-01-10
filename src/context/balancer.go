@@ -107,4 +107,5 @@ func (rr *RoundinRobin) BlockAmf(url string) {
 			rr.Amfs[i].Blocked = true
 		}
 	}
+	rr.Unlock()
 }
